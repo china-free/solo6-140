@@ -335,14 +335,18 @@ export default function QuizPanel() {
 
           {currentQuizStats && (
             <div className="flex-1 min-h-0 flex flex-col">
-              <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="grid grid-cols-4 gap-2 mb-3">
                 <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
-                  <div className="text-[10px] text-white/50 flex items-center justify-center gap-1"><Users className="w-3 h-3" />已提交</div>
-                  <div className="text-lg font-bold text-teal-300 mt-0.5">{currentQuizStats.submittedCount}<span className="text-xs text-white/40">/{currentQuizStats.totalStudents}</span></div>
+                  <div className="text-[10px] text-white/50 flex items-center justify-center gap-1"><Users className="w-3 h-3" />总人数</div>
+                  <div className="text-lg font-bold text-white mt-0.5">{currentQuizStats.totalStudents}</div>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
-                  <div className="text-[10px] text-white/50 flex items-center justify-center gap-1"><CheckCircle2 className="w-3 h-3" />正确数</div>
-                  <div className="text-lg font-bold text-green-300 mt-0.5">{currentQuizStats.correctCount}</div>
+                  <div className="text-[10px] text-white/50 flex items-center justify-center gap-1"><CheckCircle2 className="w-3 h-3" />已提交</div>
+                  <div className="text-lg font-bold text-teal-300 mt-0.5">{currentQuizStats.submittedCount}</div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
+                  <div className="text-[10px] text-white/50 flex items-center justify-center gap-1"><XCircle className="w-3 h-3" />未作答</div>
+                  <div className="text-lg font-bold text-red-300 mt-0.5">{currentQuizStats.missedCount}</div>
                 </div>
                 <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-center">
                   <div className="text-[10px] text-white/50">正确率</div>
@@ -381,7 +385,14 @@ export default function QuizPanel() {
               {mode === 'result' && (
                 <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-green-500/10 to-teal-500/10 border border-green-500/20 flex items-center gap-2 text-sm">
                   <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
-                  <span className="text-white/80">正确答案: <span className="font-bold text-green-300">{correctAnswerFinal}</span> — 共 {currentQuizStats.submittedCount} 人参与答题，正确率 {currentQuizStats.accuracyRate}%</span>
+                  <span className="text-white/80">
+                    正确答案: <span className="font-bold text-green-300">{correctAnswerFinal}</span>
+                    <span className="mx-2 text-white/30">|</span>
+                    全班 {currentQuizStats.totalStudents} 人 · 作答 {currentQuizStats.submittedCount} 人
+                    {currentQuizStats.missedCount > 0 && <><span className="mx-1 text-white/30">·</span> 未答 <span className="text-red-300 font-medium">{currentQuizStats.missedCount}</span> 人</>}
+                    <span className="mx-2 text-white/30">|</span>
+                    正确率 <span className="font-bold text-orange-300">{currentQuizStats.accuracyRate}%</span>
+                  </span>
                 </div>
               )}
             </div>

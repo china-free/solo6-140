@@ -66,21 +66,28 @@ export class QuizService {
   }
 
   forceFinishQuiz(quizId: string, classroomId: string): Quiz | undefined {
+    const quiz = quizRepository.findById(quizId);
+    if (!quiz) return undefined;
+    if (quiz.status !== 'ongoing') return quiz;
+
     const timer = this.quizTimers.get(quizId);
     if (timer) {
       clearTimeout(timer);
       this.quizTimers.delete(quizId);
     }
-    const quiz = quizRepository.finish(quizId);
-    if (quiz && this.io) {
+
+    quizRepository.bulkCreateAutoSubmissions(quizId);
+
+    const finished = quizRepository.finish(quizId);
+    if (finished && this.io) {
       const stats = quizRepository.getStats(quizId);
       this.io.to(`classroom:${classroomId}`).emit('quiz:finished', {
         quizId,
-        correctAnswer: quiz.correctAnswer,
+        correctAnswer: finished.correctAnswer,
         stats
       });
     }
-    return quiz;
+    return finished;
   }
 
   submitAnswer(

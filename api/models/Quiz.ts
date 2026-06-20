@@ -27,6 +27,7 @@ export interface QuizSubmission {
   isCorrect: boolean;
   submittedAt: Date;
   timeTakenMs: number;
+  isAutoSubmitted: boolean;
 }
 
 export interface CreateQuizDto {
@@ -41,6 +42,8 @@ export interface QuizStats {
   quizId: string;
   totalStudents: number;
   submittedCount: number;
+  autoSubmittedCount: number;
+  missedCount: number;
   correctCount: number;
   accuracyRate: number;
   optionCounts: Record<string, number>;

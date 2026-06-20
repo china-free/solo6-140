@@ -69,6 +69,8 @@ export class QuizRepository {
         quizId,
         totalStudents: 0,
         submittedCount: 0,
+        autoSubmittedCount: 0,
+        missedCount: 0,
         correctCount: 0,
         accuracyRate: 0,
         optionCounts: {}
@@ -76,20 +78,28 @@ export class QuizRepository {
     }
     const studentsInClass = studentRepository.findByClassroomId(quiz.classroomId);
     const submissions = this.getSubmissionsByQuizId(quizId);
-    const correctCount = submissions.filter(s => s.isCorrect).length;
+    const submittedCount = submissions.filter(s => !s.isAutoSubmitted).length;
+    const autoSubmittedCount = submissions.filter(s => s.isAutoSubmitted).length;
+    const correctCount = submissions.filter(s => s.isCorrect && !s.isAutoSubmitted).length;
     const optionCounts: Record<string, number> = {};
     quiz.options.forEach(opt => { optionCounts[opt.key] = 0; });
-    submissions.forEach(s => {
+    submissions.filter(s => !s.isAutoSubmitted).forEach(s => {
       if (optionCounts[s.answer] !== undefined) {
         optionCounts[s.answer]++;
       }
     });
+    const totalStudents = studentsInClass.length;
+    const accuracyRate = totalStudents > 0
+      ? Math.round((correctCount / totalStudents) * 10000) / 100
+      : 0;
     return {
       quizId,
-      totalStudents: studentsInClass.length,
-      submittedCount: submissions.length,
+      totalStudents,
+      submittedCount,
+      autoSubmittedCount,
+      missedCount: autoSubmittedCount,
       correctCount,
-      accuracyRate: submissions.length > 0 ? Math.round((correctCount / submissions.length) * 10000) / 100 : 0,
+      accuracyRate,
       optionCounts
     };
   }
@@ -98,7 +108,8 @@ export class QuizRepository {
     quizId: string,
     studentId: string,
     answer: string,
-    timeTakenMs: number
+    timeTakenMs: number,
+    isAutoSubmitted: boolean = false
   ): QuizSubmission | null {
     const quiz = this.findById(quizId);
     if (!quiz) return null;
@@ -112,7 +123,8 @@ export class QuizRepository {
       answer,
       isCorrect: answer === quiz.correctAnswer,
       submittedAt: new Date(),
-      timeTakenMs
+      timeTakenMs,
+      isAutoSubmitted
     };
     store.quizSubmissions.set(submission.id, submission);
     return submission;
@@ -121,6 +133,22 @@ export class QuizRepository {
   getSubmissionsByQuizId(quizId: string): QuizSubmission[] {
     return Array.from(store.quizSubmissions.values())
       .filter(s => s.quizId === quizId);
+  }
+
+  bulkCreateAutoSubmissions(quizId: string): { count: number; total: number } {
+    const quiz = this.findById(quizId);
+    if (!quiz) return { count: 0, total: 0 };
+    const allStudents = studentRepository.findByClassroomId(quiz.classroomId);
+    const existingSubs = this.getSubmissionsByQuizId(quizId);
+    const submittedStudentIds = new Set(existingSubs.map(s => s.studentId));
+    const totalDuration = quiz.durationSeconds * 1000;
+    let createdCount = 0;
+    for (const student of allStudents) {
+      if (submittedStudentIds.has(student.id)) continue;
+      this.createSubmission(quizId, student.id, '', totalDuration, true);
+      createdCount++;
+    }
+    return { count: createdCount, total: allStudents.length };
   }
 
   deleteByClassroomId(classroomId: string): void {

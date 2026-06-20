@@ -58,12 +58,15 @@ export interface QuizSubmission {
   isCorrect: boolean;
   submittedAt: string;
   timeTakenMs: number;
+  isAutoSubmitted: boolean;
 }
 
 export interface QuizStats {
   quizId: string;
   totalStudents: number;
   submittedCount: number;
+  autoSubmittedCount: number;
+  missedCount: number;
   correctCount: number;
   accuracyRate: number;
   optionCounts: Record<string, number>;

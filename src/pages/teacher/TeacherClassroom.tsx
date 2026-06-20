@@ -346,17 +346,31 @@ function TeacherDisplayBoard() {
   }
 
   if (currentQuiz && currentQuizStats) {
-    const total = currentQuizStats.submittedCount || 1;
+    const totalStudents = currentQuizStats.totalStudents || 1;
     return (
       <div className="h-full flex flex-col">
         <div className="mb-4">
           <p className="text-xs text-white/50 mb-1">{currentQuiz.type === 'choice' ? '选择题' : '判断题'}</p>
           <h4 className="font-bold text-lg">{currentQuiz.question}</h4>
         </div>
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-center">
+            <div className="text-[10px] text-white/50">总人数</div>
+            <div className="text-2xl font-black text-white">{currentQuizStats.totalStudents}</div>
+          </div>
+          <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-center">
+            <div className="text-[10px] text-white/50">已作答</div>
+            <div className="text-2xl font-black text-teal-300">{currentQuizStats.submittedCount}</div>
+          </div>
+          <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-center">
+            <div className="text-[10px] text-white/50">未作答</div>
+            <div className="text-2xl font-black text-red-300">{currentQuizStats.missedCount}</div>
+          </div>
+        </div>
         <div className="space-y-2.5 flex-1 overflow-y-auto pr-1">
           {currentQuiz.options.map((opt) => {
             const count = currentQuizStats.optionCounts[opt.key] || 0;
-            const percent = Math.round((count / total) * 100);
+            const percent = Math.round((count / totalStudents) * 100);
             const isCorrect = currentQuiz.status === 'finished' && opt.key === currentQuiz.correctAnswer;
             return (
               <motion.div
@@ -393,6 +407,36 @@ function TeacherDisplayBoard() {
               </motion.div>
             );
           })}
+          {currentQuiz.status === 'finished' && currentQuizStats.missedCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="relative overflow-hidden rounded-xl border p-3"
+              style={{
+                backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                borderColor: 'rgba(255, 107, 107, 0.3)'
+              }}
+            >
+              <motion.div
+                className="absolute inset-y-0 left-0 bg-red-500/15"
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.round((currentQuizStats.missedCount / totalStudents) * 100)}%` }}
+                transition={{ duration: 0.6, ease: 'easeOut' }}
+              />
+              <div className="relative flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 bg-red-500/30 text-red-200">
+                    ⏱
+                  </span>
+                  <span className="text-sm text-red-200">未作答（超时自动收卷）</span>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="text-xl font-black text-red-300">{currentQuizStats.missedCount}</div>
+                  <div className="text-[10px] text-white/50">{Math.round((currentQuizStats.missedCount / totalStudents) * 100)}%</div>
+                </div>
+              </div>
+            </motion.div>
+          )}
         </div>
         {currentQuiz.status === 'finished' && (
           <motion.div
@@ -401,12 +445,12 @@ function TeacherDisplayBoard() {
             className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-teal-500/15 to-blue-500/15 border border-teal-400/30 flex items-center justify-between gap-4"
           >
             <div>
-              <div className="text-xs text-white/60">正确率</div>
+              <div className="text-xs text-white/60">全班正确率</div>
               <div className="text-3xl font-black text-teal-300">{currentQuizStats.accuracyRate}%</div>
             </div>
             <div className="text-right">
-              <div className="text-xs text-white/60">正确/提交</div>
-              <div className="text-xl font-bold">{currentQuizStats.correctCount} / {currentQuizStats.submittedCount}</div>
+              <div className="text-xs text-white/60">正确 / 全班</div>
+              <div className="text-xl font-bold">{currentQuizStats.correctCount} / {currentQuizStats.totalStudents}</div>
             </div>
           </motion.div>
         )}
