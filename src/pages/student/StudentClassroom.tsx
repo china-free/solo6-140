@@ -16,6 +16,7 @@ interface QuizViewState {
   mySubmission: { answer: string; isCorrect: boolean } | null;
   correctAnswer: string | null;
   stats: QuizStats | null;
+  isAutoSubmitting: boolean;
 }
 
 export default function StudentClassroom() {
@@ -89,7 +90,8 @@ export default function StudentClassroom() {
               submitted: !!mySub,
               mySubmission: mySub ? { answer: mySub.answer, isCorrect: mySub.isCorrect } : null,
               correctAnswer: null,
-              stats: null
+              stats: null,
+              isAutoSubmitting: false
             });
           }
         }
@@ -113,8 +115,9 @@ export default function StudentClassroom() {
     const off1 = onEvent('student:online', ({ onlineCount: n }) => setOnlineCount(n));
     const off2 = onEvent('student:offline', ({ onlineCount: n }) => setOnlineCount(n));
     const off3 = onEvent('student:joined', () => {});
-    const off4 = onEvent('rollcall:start', () => { setIsRolling(true); setRollCallCalled(null); setShowRollCallModal(true); });
-    const off5 = onEvent('rollcall:result', ({ student, log }: { student: Student; log: RollCallLog }) => {
+    const off4 = onEvent('student:join:error', ({ message }) => { setError(message); });
+    const off5 = onEvent('rollcall:start', () => { setIsRolling(true); setRollCallCalled(null); setShowRollCallModal(true); });
+    const off6 = onEvent('rollcall:result', ({ student, log }: { student: Student; log: RollCallLog }) => {
       setIsRolling(false);
       setRollCallCalled({ student, log });
       setShowRollCallModal(true);
@@ -123,7 +126,7 @@ export default function StudentClassroom() {
       }
       setTimeout(() => { setShowRollCallModal(false); }, 6000);
     });
-    const off6 = onEvent('quiz:published', ({ quiz }) => {
+    const off7 = onEvent('quiz:published', ({ quiz }) => {
       const start = Date.now();
       setQuizView({
         quiz: { ...quiz, status: 'ongoing' },
@@ -133,13 +136,14 @@ export default function StudentClassroom() {
         submitted: false,
         mySubmission: null,
         correctAnswer: null,
-        stats: null
+        stats: null,
+        isAutoSubmitting: false
       });
     });
-    const off7 = onEvent('quiz:update', ({ stats }) => {
+    const off8 = onEvent('quiz:update', ({ stats }) => {
       setQuizView(prev => prev ? { ...prev, stats } : prev);
     });
-    const off8 = onEvent('quiz:finished', ({ correctAnswer, stats }) => {
+    const off9 = onEvent('quiz:finished', ({ correctAnswer, stats }) => {
       setQuizView(prev => {
         if (!prev) return prev;
         const updated: QuizViewState = {
@@ -152,8 +156,58 @@ export default function StudentClassroom() {
         return updated;
       });
     });
-    return () => { off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); };
+    return () => { off1(); off2(); off3(); off4(); off5(); off6(); off7(); off8(); off9(); };
   }, [classroomId, me, setOnlineCount, setIsRolling]);
+
+  const autoSubmitRef = useRef(false);
+
+  const doSubmitAnswer = async (answer: string | null, isAuto: boolean = false) => {
+    if (!quizView || !me) return;
+    setQuizView(prev => prev ? {
+      ...prev,
+      submitted: true,
+      selectedAnswer: answer,
+      isAutoSubmitting: isAuto
+    } : prev);
+    try {
+      const finalAnswer = answer || '';
+      const res = await quizApi.submitAnswer(classroomId, {
+        quizId: quizView.quiz.id,
+        studentId: me.id,
+        answer: finalAnswer,
+        startTimeMs: quizView.startTime
+      });
+      if (res.data) {
+        setQuizView(prev => prev ? {
+          ...prev,
+          stats: res.data!.stats,
+          mySubmission: {
+            answer: res.data!.submission.answer,
+            isCorrect: res.data!.submission.isCorrect
+          },
+          isAutoSubmitting: false
+        } : prev);
+      }
+    } catch (err: unknown) {
+      console.error('Submit answer failed:', err);
+      setQuizView(prev => prev ? { ...prev, isAutoSubmitting: false } : prev);
+    }
+  };
+
+  const selectAnswer = (answer: string) => {
+    if (!quizView || quizView.submitted || quizView.quiz.status !== 'ongoing') return;
+    setQuizView(prev => prev ? { ...prev, selectedAnswer: answer } : prev);
+  };
+
+  const confirmSubmit = () => {
+    if (!quizView || quizView.submitted || quizView.quiz.status !== 'ongoing' || quizView.isAutoSubmitting) return;
+    if (!quizView.selectedAnswer) {
+      alert('请先选择一个答案');
+      return;
+    }
+    if (!confirm('确认提交答案？提交后无法修改。')) return;
+    doSubmitAnswer(quizView.selectedAnswer, false);
+  };
 
   useEffect(() => {
     if (!quizView || quizView.submitted) return;
@@ -162,36 +216,21 @@ export default function StudentClassroom() {
       setQuizView(prev => {
         if (!prev) return prev;
         const next = prev.remaining - 1;
-        if (next <= 0) {
+        if (next <= 0 && !autoSubmitRef.current) {
+          autoSubmitRef.current = true;
+          setTimeout(() => {
+            doSubmitAnswer(prev.selectedAnswer, true);
+          }, 0);
           return { ...prev, remaining: 0 };
         }
-        return { ...prev, remaining: next };
+        return { ...prev, remaining: Math.max(0, next) };
       });
     }, 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      autoSubmitRef.current = false;
+    };
   }, [quizView?.quiz.id, quizView?.submitted, quizView?.quiz.status]);
-
-  const submitAnswer = async (answer: string) => {
-    if (!quizView || quizView.submitted || !me) return;
-    setQuizView(prev => prev ? { ...prev, submitted: true, selectedAnswer: answer } : prev);
-    try {
-      const res = await quizApi.submitAnswer(classroomId, {
-        quizId: quizView.quiz.id,
-        studentId: me.id,
-        answer,
-        startTimeMs: quizView.startTime
-      });
-      if (res.data) {
-        setQuizView(prev => prev ? {
-          ...prev,
-          stats: res.data!.stats,
-          mySubmission: { answer: res.data!.submission.answer, isCorrect: res.data!.submission.isCorrect }
-        } : prev);
-      }
-    } catch (err: unknown) {
-      console.error(err);
-    }
-  };
 
   if (loading) {
     return (
@@ -426,12 +465,13 @@ export default function StudentClassroom() {
 
             <h3 className="text-xl font-bold mb-6 leading-relaxed">{quizView.quiz.question}</h3>
 
-            <div className="space-y-3 mb-5">
+            <div className="space-y-3 mb-4">
               {quizView.quiz.options.map((opt) => {
                 const isSelected = quizView.selectedAnswer === opt.key;
                 const isCorrectOption = quizView.correctAnswer === opt.key;
                 const showResult = quizView.quiz.status === 'finished';
-                const isWrongSelected = showResult && isSelected && !isCorrectOption;
+                const isWrongSelected = showResult && quizView.mySubmission?.answer === opt.key && !quizView.mySubmission?.isCorrect;
+                const canInteract = !quizView.submitted && quizView.quiz.status === 'ongoing' && !quizView.isAutoSubmitting;
                 let baseClass = 'w-full text-left p-4 rounded-2xl border-2 transition-all flex items-center gap-3 ';
                 if (showResult) {
                   if (isCorrectOption) baseClass += 'bg-green-500/15 border-green-500/60 text-green-200';
@@ -449,8 +489,8 @@ export default function StudentClassroom() {
                 return (
                   <button
                     key={opt.key}
-                    disabled={quizView.submitted || quizView.quiz.status !== 'ongoing'}
-                    onClick={() => submitAnswer(opt.key)}
+                    disabled={!canInteract}
+                    onClick={() => selectAnswer(opt.key)}
                     className={baseClass}
                   >
                     <span className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
@@ -470,6 +510,42 @@ export default function StudentClassroom() {
               })}
             </div>
 
+            {!quizView.submitted && quizView.quiz.status === 'ongoing' && (
+              <div className="space-y-2 mb-4">
+                <motion.button
+                  whileHover={!quizView.selectedAnswer || quizView.isAutoSubmitting ? {} : { scale: 1.02 }}
+                  whileTap={!quizView.selectedAnswer || quizView.isAutoSubmitting ? {} : { scale: 0.98 }}
+                  onClick={confirmSubmit}
+                  disabled={!quizView.selectedAnswer || quizView.isAutoSubmitting}
+                  className={`w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-2 ${
+                    !quizView.selectedAnswer || quizView.isAutoSubmitting
+                      ? 'bg-white/5 text-white/30 border border-white/10 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-orange-500 via-pink-500 to-rose-500 shadow-xl shadow-orange-500/30 hover:shadow-orange-500/50 text-white'
+                  }`}
+                >
+                  {quizView.isAutoSubmitting ? (
+                    <>⏳ 自动提交中...</>
+                  ) : quizView.selectedAnswer ? (
+                    <>✓ 确认提交答案</>
+                  ) : (
+                    <>请先选择一个选项</>
+                  )}
+                </motion.button>
+                <p className="text-center text-xs text-white/40">
+                  选择后可修改，点击「确认提交」后无法更改 · 倒计时结束系统将自动收卷
+                </p>
+              </div>
+            )}
+
+            {quizView.isAutoSubmitting && (
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 p-3 rounded-xl bg-orange-500/10 border border-orange-400/30 text-center text-sm text-orange-200">
+                ⏰ 时间到，正在自动提交答案...
+              </motion.div>
+            )}
+
             {quizView.submitted && quizView.mySubmission && quizView.quiz.status === 'finished' && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
@@ -483,7 +559,11 @@ export default function StudentClassroom() {
                 <CheckCircle2 className={`w-6 h-6 ${quizView.mySubmission.isCorrect ? 'text-green-400' : 'text-red-400'}`} />
                 <div className="flex-1">
                   <div className="font-bold">
-                    {quizView.mySubmission.isCorrect ? '🎉 回答正确！' : '😅 回答错误'}
+                    {quizView.mySubmission.isCorrect
+                      ? '🎉 回答正确！'
+                      : quizView.mySubmission.answer
+                      ? '😅 回答错误'
+                      : '⌛ 未作答（超时自动收卷）'}
                   </div>
                   <div className="text-xs text-white/60 mt-0.5">
                     正确答案: <span className="font-bold text-green-300">{quizView.correctAnswer}</span>
@@ -498,16 +578,18 @@ export default function StudentClassroom() {
             )}
 
             {quizView.submitted && quizView.quiz.status === 'ongoing' && (
-              <div className="p-4 rounded-2xl bg-teal-500/10 border border-teal-400/30 flex items-center gap-3">
-                <CheckCircle2 className="w-5 h-5 text-teal-400 flex-shrink-0" />
-                <div className="text-sm text-teal-200">
-                  答案已提交，等待其他同学作答中...
+              <div className={`p-4 rounded-2xl flex items-center gap-3 ${
+                quizView.isAutoSubmitting
+                  ? 'bg-orange-500/10 border border-orange-400/30'
+                  : 'bg-teal-500/10 border border-teal-400/30'
+              }`}>
+                <CheckCircle2 className={`w-5 h-5 flex-shrink-0 ${quizView.isAutoSubmitting ? 'text-orange-400' : 'text-teal-400'}`} />
+                <div className={`text-sm ${quizView.isAutoSubmitting ? 'text-orange-200' : 'text-teal-200'}`}>
+                  {quizView.isAutoSubmitting
+                    ? '系统正在自动提交您的答案...'
+                    : '答案已提交，等待其他同学作答中...'}
                 </div>
               </div>
-            )}
-
-            {!quizView.submitted && quizView.quiz.status === 'ongoing' && (
-              <p className="text-center text-xs text-white/40">点击选项立即提交答案（仅一次机会）</p>
             )}
           </motion.div>
         ) : (

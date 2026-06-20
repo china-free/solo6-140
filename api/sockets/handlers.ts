@@ -15,28 +15,36 @@ export function setupSocketHandlers(io: IOServer) {
 
     socket.on('student:join', ({ classroomId, studentId, studentName }: { classroomId: string; studentId?: string; studentName?: string }) => {
       const classroom = classroomService.getClassroomById(classroomId);
-      if (!classroom) return;
+      if (!classroom) {
+        socket.emit('student:join:error', { message: '课堂不存在' });
+        return;
+      }
       let finalStudentId = studentId;
       if (!finalStudentId && studentName) {
         try {
-          const student = studentService.findOrCreateByName(classroomId, studentName);
+          const student = studentService.findByName(classroomId, studentName);
           finalStudentId = student.id;
-        } catch (_e) {
+        } catch (e: unknown) {
+          socket.emit('student:join:error', {
+            message: e instanceof Error ? e.message : '加入课堂失败'
+          });
           return;
         }
       }
-      if (finalStudentId) {
-        studentService.updateStudentOnlineStatus(finalStudentId, true);
-        socket.join(`classroom:${classroomId}`);
-        socket.data.classroomId = classroomId;
-        socket.data.studentId = finalStudentId;
-        socket.data.role = 'student';
-        socket.emit('student:joined', { studentId: finalStudentId, classroomId });
-        io.to(`classroom:${classroomId}`).emit('student:online', {
-          studentId: finalStudentId,
-          onlineCount: studentService.getStudentsByClassroom(classroomId).filter(s => s.isOnline).length
-        });
+      if (!finalStudentId) {
+        socket.emit('student:join:error', { message: '学生信息无效' });
+        return;
       }
+      studentService.updateStudentOnlineStatus(finalStudentId, true);
+      socket.join(`classroom:${classroomId}`);
+      socket.data.classroomId = classroomId;
+      socket.data.studentId = finalStudentId;
+      socket.data.role = 'student';
+      socket.emit('student:joined', { studentId: finalStudentId, classroomId });
+      io.to(`classroom:${classroomId}`).emit('student:online', {
+        studentId: finalStudentId,
+        onlineCount: studentService.getStudentsByClassroom(classroomId).filter(s => s.isOnline).length
+      });
     });
 
     socket.on('disconnect', () => {

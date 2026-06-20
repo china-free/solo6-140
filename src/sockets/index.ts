@@ -24,6 +24,7 @@ export interface SocketEvents {
   'student:online': { studentId: string; onlineCount: number };
   'student:offline': { studentId: string; onlineCount: number };
   'student:joined': { studentId: string; classroomId: string };
+  'student:join:error': { message: string };
 }
 
 export function emitTeacherJoin(classroomId: string) {

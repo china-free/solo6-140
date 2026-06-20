@@ -39,7 +39,7 @@ export const StudentController = {
     try {
       const { classroomId } = req.params;
       const { name } = req.body as { name: string };
-      const student = studentService.findOrCreateByName(classroomId, name);
+      const student = studentService.findByName(classroomId, name);
       res.json({ success: true, data: student });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '加入课堂失败';

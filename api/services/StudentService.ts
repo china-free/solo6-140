@@ -48,14 +48,14 @@ export class StudentService {
     return studentRepository.findById(id);
   }
 
-  findOrCreateByName(classroomId: string, name: string): Student {
+  findByName(classroomId: string, name: string): Student {
     if (!name || !name.trim()) {
       throw new Error('姓名不能为空');
     }
     const trimmed = name.trim();
     const existing = studentRepository.findByClassroomAndName(classroomId, trimmed);
     if (existing) return existing;
-    return studentRepository.create(classroomId, { name: trimmed });
+    throw new Error('您不在该课堂的学生名单中，请联系教师添加');
   }
 
   updateStudentOnlineStatus(studentId: string, isOnline: boolean): Student | undefined {
